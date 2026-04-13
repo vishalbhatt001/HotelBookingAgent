@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: hotel-booking-agent
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
+
+server:
+  port: 9020
+
+preview:
+  provider: ${PREVIEW_PROVIDER:rapidapi}
+
+agent:
+  llm:
+    provider: ${LLM_PROVIDER:openai}
+    api-key: ${OPENAI_API_KEY:}
+    chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+    embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    temperature: ${OPENAI_TEMPERATURE:0.1}
+  rag:
+    top-k: ${RAG_TOP_K:4}
+    min-score: ${RAG_MIN_SCORE:0.35}
+
+booking:
+  rapidapi:
+    base-url: ${RAPIDAPI_BASE_URL:https://booking-com.p.rapidapi.com}
+    host: ${RAPIDAPI_HOST:booking-com.p.rapidapi.com}
+    key: ${RAPIDAPI_KEY:}
+    locale: ${RAPIDAPI_LOCALE:en-gb}
+    currency: ${RAPIDAPI_CURRENCY:EUR}
+    connect-timeout-ms: ${RAPIDAPI_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${RAPIDAPI_READ_TIMEOUT_MS:12000}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: alpha
+    tagsSorter: alpha

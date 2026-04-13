@@ -1,0 +1,28 @@
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+
+# Java / Maven build output
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE/editor files
+.idea/
+.vscode/
+*.iml
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Python cache (launcher script support)
+__pycache__/
+*.pyc
