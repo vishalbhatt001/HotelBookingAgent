@@ -24,6 +24,8 @@ public class IntentPolicyWorkerAgent implements WorkerAgent {
     private static final Pattern DECLINE_PATTERN = Pattern.compile("\\b(no|decline|cancel|change|edit)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern CARD_PATTERN = Pattern.compile("\\b(?:\\d[ -]*?){13,19}\\b");
     private static final Pattern CVV_PATTERN = Pattern.compile("\\b(?:cvv|cvc|security code)\\s*[:#-]?\\s*\\d{3,4}\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern POLICY_PATTERN = Pattern.compile("\\b(policy|cancellation|refund|rules|terms)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PAYMENT_PATTERN = Pattern.compile("\\b(pay|payment|card|invoice|receipt)\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern GOV_ID_PATTERN = Pattern.compile(
             "\\b(passport|ssn|social security|national id|aadhaar|driver'?s license|driving licence)\\b",
             Pattern.CASE_INSENSITIVE
@@ -51,6 +53,14 @@ public class IntentPolicyWorkerAgent implements WorkerAgent {
         if (isRelativeDateWithoutIsoDate(userMessage, task)) {
             return AgentResult.success(type(), "Please confirm the exact check-in and check-out dates in YYYY-MM-DD format.")
                     .withPayload("askUser", true);
+        }
+
+        if (POLICY_PATTERN.matcher(userMessage).find()) {
+            return AgentResult.success(type(), "Policy question detected.").withPayload("policyQuestion", true);
+        }
+
+        if (PAYMENT_PATTERN.matcher(userMessage).find()) {
+            return AgentResult.success(type(), "Payment readiness flow detected.").withPayload("paymentIntent", true);
         }
 
         if (session.getState() == BookingState.WAITING_FOR_CONFIRMATION && session.getLastPreview() != null) {
@@ -92,7 +102,6 @@ public class IntentPolicyWorkerAgent implements WorkerAgent {
 
     private String validate(BookingSession session) {
         StringBuilder missing = new StringBuilder();
-        if (isBlank(session.getHotelId())) appendMissing(missing, "hotelId");
         if (isBlank(session.getCheckin())) appendMissing(missing, "checkin");
         if (isBlank(session.getCheckout())) appendMissing(missing, "checkout");
         if (session.getAdultCount() == null) appendMissing(missing, "adultCount");

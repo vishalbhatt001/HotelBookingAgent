@@ -22,6 +22,7 @@ public class AgentProperties {
         private String chatModel = "gpt-4o-mini";
         private String embeddingModel = "text-embedding-3-small";
         private double temperature = 0.1;
+        private boolean supervisorEnabled = true;
 
         public String getProvider() {
             return provider;
@@ -61,6 +62,14 @@ public class AgentProperties {
 
         public void setTemperature(double temperature) {
             this.temperature = temperature;
+        }
+
+        public boolean isSupervisorEnabled() {
+            return supervisorEnabled;
+        }
+
+        public void setSupervisorEnabled(boolean supervisorEnabled) {
+            this.supervisorEnabled = supervisorEnabled;
         }
     }
 

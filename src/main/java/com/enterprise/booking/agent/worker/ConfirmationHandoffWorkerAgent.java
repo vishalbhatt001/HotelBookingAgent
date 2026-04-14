@@ -30,6 +30,24 @@ public class ConfirmationHandoffWorkerAgent implements WorkerAgent {
                 }
                 """.formatted(params.hotelId(), params.checkin(), params.checkout(), params.adultCount());
 
-        return AgentResult.success(type(), "Final handoff ready.").withPayload("handoffJson", handoff);
+        String paymentDraft = """
+                {
+                  "paymentReadiness": {
+                    "requiredFields": [
+                      "booker.email",
+                      "booker.name.first_name",
+                      "booker.name.last_name",
+                      "booker.telephone",
+                      "payment.method",
+                      "payment.timing"
+                    ],
+                    "status": "PENDING_PAYMENT_DETAILS"
+                  }
+                }
+                """;
+
+        return AgentResult.success(type(), "Final handoff ready.")
+                .withPayload("handoffJson", handoff)
+                .withPayload("paymentDraft", paymentDraft);
     }
 }

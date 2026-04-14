@@ -38,6 +38,21 @@ public class EnterpriseBookingFlowService {
                 decision.action(),
                 decision.state()
         );
+        log.info(
+                "finalization_gate sessionId={} readyForCreate={}",
+                sessionId,
+                "READY_FOR_CREATE".equals(extractStatus(decision.reply()))
+        );
         return new BookingTurnResponse(decision.state(), decision.reply());
+    }
+
+    private String extractStatus(String reply) {
+        if (reply == null) {
+            return "";
+        }
+        if (reply.contains("\"status\": \"READY_FOR_CREATE\"")) {
+            return "READY_FOR_CREATE";
+        }
+        return "";
     }
 }

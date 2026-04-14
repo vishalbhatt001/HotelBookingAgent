@@ -80,6 +80,18 @@ docker compose up -d redis
 - `GET /api/booking/health/agents` - configuration-level checks
 - `GET /api/booking/health/agents?deep=true` - live outbound checks to Redis/OpenAI/RapidAPI
 
+## Agent Tracing
+
+- `GET /api/booking/traces/{sessionId}?limit=50` - recent worker/tool trace events
+
+## Expanded Agentic Features
+
+- 6-worker orchestration (`IntentPolicy`, `RetrievalRAG`, `HotelSearch`, `PricingProvider`, `RecoveryFallback`, `ConfirmationHandoff`)
+- Date unavailability recovery with alternative date suggestions
+- Fallback routing to local mock preview when provider is unavailable (`PREVIEW_FALLBACK_TO_MOCK=true`)
+- Policy explainer responses using retrieved RAG facts
+- Payment readiness draft included during final handoff generation
+
 ## Provider behavior
 
 - `rapidapi`: calls `GET /v1/hotels/search` on the configured RapidAPI host, parses price/cancellation, then asks confirmation.
@@ -91,3 +103,4 @@ For RapidAPI, request headers are:
 
 Docs:
 - [RapidAPI Hub](https://rapidapi.com)
+- Full project guide: `docs/COMPLETE_SYSTEM_GUIDE.md`

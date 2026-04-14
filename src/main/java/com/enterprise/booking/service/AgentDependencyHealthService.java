@@ -11,6 +11,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.ResourceAccessException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -99,18 +100,9 @@ public class AgentDependencyHealthService {
             RestClient client = rapidApiRestClient();
             client.get()
                     .uri(uriBuilder -> uriBuilder
-                            .path("/v1/hotels/search")
-                            .queryParam("checkin_date", "2030-10-10")
-                            .queryParam("checkout_date", "2030-10-12")
-                            .queryParam("adults_number", 2)
-                            .queryParam("room_number", 1)
-                            .queryParam("dest_id", "10507360")
-                            .queryParam("dest_type", "hotel")
-                            .queryParam("order_by", "popularity")
+                            .path("/v1/hotels/locations")
+                            .queryParam("name", "Dubai")
                             .queryParam("locale", rapidApiProperties.getLocale())
-                            .queryParam("filter_by_currency", rapidApiProperties.getCurrency())
-                            .queryParam("units", "metric")
-                            .queryParam("page_number", 0)
                             .build())
                     .retrieve()
                     .body(String.class);
@@ -118,12 +110,17 @@ public class AgentDependencyHealthService {
         } catch (RestClientResponseException ex) {
             HttpStatusCode status = ex.getStatusCode();
             if (status.value() == 401 || status.value() == 403) {
-                return new ComponentHealth("DOWN", "RapidAPI authentication failed.");
+                return new ComponentHealth("DOWN", "RapidAPI authentication failed. Details: " + extractErrorDetails(ex));
+            }
+            if (status.value() == 429) {
+                return new ComponentHealth("DOWN", "RapidAPI rate-limited the request. Details: " + extractErrorDetails(ex));
             }
             if (status.is5xxServerError()) {
-                return new ComponentHealth("DOWN", "RapidAPI server error: " + status.value());
+                return new ComponentHealth("DOWN", "RapidAPI server error: " + status.value() + ". Details: " + extractErrorDetails(ex));
             }
-            return new ComponentHealth("UP", "RapidAPI reachable (status " + status.value() + ").");
+            return new ComponentHealth("DOWN", "RapidAPI returned status " + status.value() + ". Details: " + extractErrorDetails(ex));
+        } catch (ResourceAccessException ex) {
+            return new ComponentHealth("DOWN", "RapidAPI connection timeout/network failure: " + ex.getMessage());
         } catch (RuntimeException ex) {
             return new ComponentHealth("DOWN", "RapidAPI call failed: " + ex.getMessage());
         }
@@ -150,5 +147,17 @@ public class AgentDependencyHealthService {
     }
 
     public record ComponentHealth(String status, String detail) {
+    }
+
+    private String extractErrorDetails(RestClientResponseException ex) {
+        String body = ex.getResponseBodyAsString();
+        if (body == null || body.isBlank()) {
+            return "empty response body";
+        }
+        String normalized = body.replace('\n', ' ').replace('\r', ' ').trim();
+        if (normalized.length() > 250) {
+            return normalized.substring(0, 250) + "...";
+        }
+        return normalized;
     }
 }

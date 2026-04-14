@@ -13,6 +13,7 @@ server:
 
 preview:
   provider: ${PREVIEW_PROVIDER:rapidapi}
+  fallback-to-mock: ${PREVIEW_FALLBACK_TO_MOCK:true}
 
 agent:
   llm:
@@ -21,6 +22,7 @@ agent:
     chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
     embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
     temperature: ${OPENAI_TEMPERATURE:0.1}
+    supervisor-enabled: ${SUPERVISOR_LLM_ENABLED:true}
   rag:
     top-k: ${RAG_TOP_K:4}
     min-score: ${RAG_MIN_SCORE:0.35}
@@ -35,6 +37,14 @@ booking:
     connect-timeout-ms: ${RAPIDAPI_CONNECT_TIMEOUT_MS:5000}
     read-timeout-ms: ${RAPIDAPI_READ_TIMEOUT_MS:12000}
 
+pricing:
+  rules:
+    enabled: ${PRICING_RULES_ENABLED:true}
+    markup-percent: ${PRICING_MARKUP_PERCENT:5.0}
+    service-fee-fixed: ${PRICING_SERVICE_FEE_FIXED:3.0}
+    weekend-surcharge-percent: ${PRICING_WEEKEND_SURCHARGE_PERCENT:2.0}
+    loyalty-discount-percent: ${PRICING_LOYALTY_DISCOUNT_PERCENT:1.0}
+
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -42,3 +52,11 @@ springdoc:
     path: /swagger-ui.html
     operationsSorter: alpha
     tagsSorter: alpha
+
+observability:
+  class-logging:
+    enabled: ${CLASS_LOGGING_ENABLED:true}
+    include-args: ${CLASS_LOGGING_INCLUDE_ARGS:true}
+    include-result: ${CLASS_LOGGING_INCLUDE_RESULT:true}
+    max-payload-length: ${CLASS_LOGGING_MAX_PAYLOAD_LENGTH:400}
+    slow-method-threshold-ms: ${CLASS_LOGGING_SLOW_THRESHOLD_MS:1500}

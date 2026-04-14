@@ -6,22 +6,24 @@ import com.enterprise.booking.agent.ConversationContext;
 import com.enterprise.booking.api.BookingTurnRequest;
 import com.enterprise.booking.model.BookingSession;
 import com.enterprise.booking.model.BookingState;
-import com.enterprise.booking.model.PreviewResult;
-import com.enterprise.booking.tool.HotelPreviewToolClient;
-import com.enterprise.booking.tool.PreviewToolException;
+import com.enterprise.booking.service.AiToolExecutionService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 class PricingProviderWorkerAgentTest {
 
     @Test
     void shouldReturnPreviewAndSetWaitingState() {
-        HotelPreviewToolClient client = Mockito.mock(HotelPreviewToolClient.class);
-        Mockito.when(client.preview(any())).thenReturn(new PreviewResult("EUR 200.00", "Free cancellation"));
-        PricingProviderWorkerAgent worker = new PricingProviderWorkerAgent(client);
+        AiToolExecutionService ai = Mockito.mock(AiToolExecutionService.class);
+        Mockito.when(ai.runPricing(eq("booking_preview"), any(), any(), any(), any())).thenReturn("""
+                {"providerPrice":"EUR 200.00","finalPrice":"EUR 214.23","cancellationPolicy":"Free cancellation","confirmationQuestion":"Do you confirm this booking at EUR 214.23?"}
+                """);
+        PricingProviderWorkerAgent worker = new PricingProviderWorkerAgent(ai, new ObjectMapper());
 
         BookingSession session = new BookingSession();
         session.setHotelId("10507360");
@@ -43,11 +45,11 @@ class PricingProviderWorkerAgentTest {
 
     @Test
     void shouldMapPreviewValidationError() {
-        HotelPreviewToolClient client = Mockito.mock(HotelPreviewToolClient.class);
-        Mockito.when(client.preview(any())).thenThrow(
-                new PreviewToolException(PreviewToolException.Code.VALIDATION_ERROR, "bad input")
-        );
-        PricingProviderWorkerAgent worker = new PricingProviderWorkerAgent(client);
+        AiToolExecutionService ai = Mockito.mock(AiToolExecutionService.class);
+        Mockito.when(ai.runPricing(eq("booking_preview"), any(), any(), any(), any())).thenReturn("""
+                {"error":"preview_failed"}
+                """);
+        PricingProviderWorkerAgent worker = new PricingProviderWorkerAgent(ai, new ObjectMapper());
 
         BookingSession session = new BookingSession();
         session.setHotelId("bad");
@@ -63,6 +65,6 @@ class PricingProviderWorkerAgentTest {
 
         var result = worker.execute(task);
         assertFalse(result.isSuccess());
-        assertTrue(result.getMessage().contains("rejected"));
+        assertTrue(result.getMessage().contains("temporarily unavailable"));
     }
 }

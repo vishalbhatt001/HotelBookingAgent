@@ -43,7 +43,7 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
                             .queryParam("adults_number", params.adultCount())
                             .queryParam("room_number", 1)
                             .queryParam("dest_id", params.hotelId())
-                            .queryParam("dest_type", "hotel")
+                            .queryParam("dest_type", "city")
                             .queryParam("order_by", "popularity")
                             .queryParam("locale", properties.getLocale())
                             .queryParam("filter_by_currency", properties.getCurrency())
@@ -144,7 +144,7 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
         if (status.value() == 400 || status.value() == 422) {
             return new PreviewToolException(
                     PreviewToolException.Code.VALIDATION_ERROR,
-                    "RapidAPI rejected booking input. Please verify hotelId, dates, and adultCount. " +
+                    "RapidAPI rejected booking input. Please verify destinationId (city id), dates, and adultCount. " +
                             "Provider details: " + errorDetails
             );
         }
