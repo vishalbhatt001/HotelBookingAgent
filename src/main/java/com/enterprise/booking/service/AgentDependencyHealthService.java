@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.ResourceAccessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -21,6 +23,7 @@ import java.util.Optional;
 @Service
 public class AgentDependencyHealthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AgentDependencyHealthService.class);
     private final StringRedisTemplate redisTemplate;
     private final AgentProperties agentProperties;
     private final RapidApiProperties rapidApiProperties;
@@ -45,16 +48,20 @@ public class AgentDependencyHealthService {
     }
 
     public AgentHealthResponse check(boolean deep) {
+        log.info("check start deep={}", deep);
         Map<String, ComponentHealth> components = new LinkedHashMap<>();
         components.put("redis", checkRedis(deep));
         components.put("openai", checkOpenAi(deep));
         components.put("rapidapi", checkRapidApi(deep));
 
         String overall = components.values().stream().allMatch(c -> "UP".equals(c.status())) ? "UP" : "DEGRADED";
+        log.info("check done overall={} redis={} openai={} rapidapi={}",
+                overall, components.get("redis").status(), components.get("openai").status(), components.get("rapidapi").status());
         return new AgentHealthResponse(overall, deep, Instant.now().toString(), components);
     }
 
     private ComponentHealth checkRedis(boolean deep) {
+        log.info("checkRedis start deep={}", deep);
         try {
             if (deep) {
                 String pong = redisTemplate.execute((RedisCallback<String>) connection -> connection.ping());
@@ -64,11 +71,13 @@ public class AgentDependencyHealthService {
             }
             return new ComponentHealth("UP", "Redis configuration is valid.");
         } catch (RuntimeException ex) {
+            log.error("checkRedis failed message={}", ex.getMessage(), ex);
             return new ComponentHealth("DOWN", "Redis check failed: " + ex.getMessage());
         }
     }
 
     private ComponentHealth checkOpenAi(boolean deep) {
+        log.info("checkOpenAi start deep={}", deep);
         if (agentProperties.getLlm().getApiKey() == null || agentProperties.getLlm().getApiKey().isBlank()) {
             return new ComponentHealth("DOWN", "OPENAI_API_KEY is missing.");
         }
@@ -82,13 +91,16 @@ public class AgentDependencyHealthService {
 
         try {
             embeddingModel.get().embed("health check");
+            log.info("checkOpenAi deep call succeeded");
             return new ComponentHealth("UP", "OpenAI embedding call succeeded.");
         } catch (RuntimeException ex) {
+            log.error("checkOpenAi deep call failed message={}", ex.getMessage(), ex);
             return new ComponentHealth("DOWN", "OpenAI call failed: " + ex.getMessage());
         }
     }
 
     private ComponentHealth checkRapidApi(boolean deep) {
+        log.info("checkRapidApi start deep={}", deep);
         if (rapidApiProperties.getKey() == null || rapidApiProperties.getKey().isBlank()) {
             return new ComponentHealth("DOWN", "RAPIDAPI_KEY is missing.");
         }
@@ -106,6 +118,7 @@ public class AgentDependencyHealthService {
                             .build())
                     .retrieve()
                     .body(String.class);
+            log.info("checkRapidApi deep probe succeeded");
             return new ComponentHealth("UP", "RapidAPI request succeeded.");
         } catch (RestClientResponseException ex) {
             HttpStatusCode status = ex.getStatusCode();
@@ -120,13 +133,16 @@ public class AgentDependencyHealthService {
             }
             return new ComponentHealth("DOWN", "RapidAPI returned status " + status.value() + ". Details: " + extractErrorDetails(ex));
         } catch (ResourceAccessException ex) {
+            log.error("checkRapidApi resource access failed message={}", ex.getMessage(), ex);
             return new ComponentHealth("DOWN", "RapidAPI connection timeout/network failure: " + ex.getMessage());
         } catch (RuntimeException ex) {
+            log.error("checkRapidApi runtime failed message={}", ex.getMessage(), ex);
             return new ComponentHealth("DOWN", "RapidAPI call failed: " + ex.getMessage());
         }
     }
 
     private RestClient rapidApiRestClient() {
+        log.info("rapidApiRestClient build start baseUrl={} host={}", rapidApiProperties.getBaseUrl(), rapidApiProperties.getHost());
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(rapidApiProperties.getConnectTimeoutMs());
         requestFactory.setReadTimeout(rapidApiProperties.getReadTimeoutMs());
@@ -150,6 +166,7 @@ public class AgentDependencyHealthService {
     }
 
     private String extractErrorDetails(RestClientResponseException ex) {
+        log.info("extractErrorDetails start");
         String body = ex.getResponseBodyAsString();
         if (body == null || body.isBlank()) {
             return "empty response body";

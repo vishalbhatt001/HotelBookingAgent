@@ -53,10 +53,6 @@ springdoc:
     operationsSorter: alpha
     tagsSorter: alpha
 
-observability:
-  class-logging:
-    enabled: ${CLASS_LOGGING_ENABLED:true}
-    include-args: ${CLASS_LOGGING_INCLUDE_ARGS:true}
-    include-result: ${CLASS_LOGGING_INCLUDE_RESULT:true}
-    max-payload-length: ${CLASS_LOGGING_MAX_PAYLOAD_LENGTH:400}
-    slow-method-threshold-ms: ${CLASS_LOGGING_SLOW_THRESHOLD_MS:1500}
+logging:
+  level:
+    com.enterprise.booking: INFO

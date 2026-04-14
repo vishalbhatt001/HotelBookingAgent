@@ -1,6 +1,8 @@
 package com.enterprise.booking.service;
 
 import com.enterprise.booking.config.PricingRulesProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -14,6 +16,7 @@ import java.util.Map;
 @Service
 public class PricingComputationService {
 
+    private static final Logger log = LoggerFactory.getLogger(PricingComputationService.class);
     private final PricingRulesProperties rules;
 
     public PricingComputationService(PricingRulesProperties rules) {
@@ -21,10 +24,12 @@ public class PricingComputationService {
     }
 
     public PricingBreakdown apply(String providerPriceText, String checkin) {
+        log.info("apply start providerPriceText={} checkin={}", providerPriceText, checkin);
         ParsedPrice parsed = parse(providerPriceText);
         BigDecimal base = parsed.amount();
 
         if (!rules.isEnabled()) {
+            log.info("apply rules disabled");
             return new PricingBreakdown(
                     parsed.currency(),
                     base,
@@ -53,27 +58,37 @@ public class PricingComputationService {
         items.put("loyaltyDiscount", scale(loyaltyDiscount));
         items.put("adjustedTotal", scale(adjusted));
 
-        return new PricingBreakdown(parsed.currency(), scale(base), scale(adjusted), items);
+        PricingBreakdown breakdown = new PricingBreakdown(parsed.currency(), scale(base), scale(adjusted), items);
+        log.info("apply done currency={} providerAmount={} adjustedAmount={}",
+                breakdown.currency(), breakdown.providerAmount(), breakdown.adjustedAmount());
+        return breakdown;
     }
 
     public String format(String currency, BigDecimal amount) {
-        return currency.toUpperCase(Locale.ROOT) + " " + scale(amount);
+        String formatted = currency.toUpperCase(Locale.ROOT) + " " + scale(amount);
+        log.info("format currency={} amount={} formatted={}", currency, amount, formatted);
+        return formatted;
     }
 
     private boolean isWeekend(String checkin) {
+        log.info("isWeekend start checkin={}", checkin);
         try {
             DayOfWeek day = LocalDate.parse(checkin).getDayOfWeek();
             return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
         } catch (RuntimeException ex) {
+            log.warn("isWeekend parse failed checkin={}", checkin);
             return false;
         }
     }
 
     private BigDecimal percent(BigDecimal base, double pct) {
-        return base.multiply(BigDecimal.valueOf(pct)).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+        BigDecimal result = base.multiply(BigDecimal.valueOf(pct)).divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+        log.info("percent base={} pct={} result={}", base, pct, result);
+        return result;
     }
 
     private ParsedPrice parse(String priceText) {
+        log.info("parse start priceText={}", priceText);
         if (priceText == null || priceText.isBlank()) {
             return new ParsedPrice("EUR", BigDecimal.ZERO);
         }
@@ -87,12 +102,15 @@ public class PricingComputationService {
         try {
             return new ParsedPrice(currency, new BigDecimal(normalized));
         } catch (RuntimeException ex) {
+            log.warn("parse failed normalized={}", normalized);
             return new ParsedPrice(currency, BigDecimal.ZERO);
         }
     }
 
     private BigDecimal scale(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal scaled = value.setScale(2, RoundingMode.HALF_UP);
+        log.info("scale value={} scaled={}", value, scaled);
+        return scaled;
     }
 
     private record ParsedPrice(String currency, BigDecimal amount) {

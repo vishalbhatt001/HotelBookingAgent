@@ -6,18 +6,24 @@ import com.enterprise.booking.agent.AgentType;
 import com.enterprise.booking.agent.WorkerAgent;
 import com.enterprise.booking.model.BookingParams;
 import com.enterprise.booking.model.BookingState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ConfirmationHandoffWorkerAgent implements WorkerAgent {
 
+    private static final Logger log = LoggerFactory.getLogger(ConfirmationHandoffWorkerAgent.class);
+
     @Override
     public AgentType type() {
+        log.info("type called");
         return AgentType.CONFIRMATION_HANDOFF;
     }
 
     @Override
     public AgentResult execute(AgentTask task) {
+        log.info("execute start");
         BookingParams params = task.context().getBookingSession().toParams();
         task.context().getBookingSession().setState(BookingState.FINALIZED);
         String handoff = """
@@ -46,8 +52,11 @@ public class ConfirmationHandoffWorkerAgent implements WorkerAgent {
                 }
                 """;
 
-        return AgentResult.success(type(), "Final handoff ready.")
+        AgentResult result = AgentResult.success(type(), "Final handoff ready.")
                 .withPayload("handoffJson", handoff)
                 .withPayload("paymentDraft", paymentDraft);
+        log.info("execute done finalized hotelId={} checkin={} checkout={}",
+                params.hotelId(), params.checkin(), params.checkout());
+        return result;
     }
 }

@@ -9,6 +9,8 @@ import com.enterprise.booking.tool.HotelSearchToolClient;
 import com.enterprise.booking.tool.PreviewToolException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -26,6 +28,7 @@ import java.util.Set;
 @Service
 public class ProductToolService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProductToolService.class);
     private final HotelPreviewToolClient previewToolClient;
     private final HotelSearchToolClient searchToolClient;
     private final PricingComputationService pricingComputationService;
@@ -47,6 +50,8 @@ public class ProductToolService {
     }
 
     public String availabilityCalendar(String hotelId, String checkin, String checkout, int adultCount, int maxAlternatives) {
+        log.info("availabilityCalendar start hotelId={} checkin={} checkout={} adultCount={} maxAlternatives={}",
+                hotelId, checkin, checkout, adultCount, maxAlternatives);
         List<Map<String, Object>> results = new ArrayList<>();
         LocalDate in = LocalDate.parse(checkin);
         LocalDate out = LocalDate.parse(checkout);
@@ -75,10 +80,13 @@ public class ProductToolService {
             }
         }
 
+        log.info("availabilityCalendar done hotelId={} alternativesFound={}", hotelId, results.size());
         return toJson(Map.of("hotelId", hotelId, "alternatives", results));
     }
 
     public String singleHotelPreview(String hotelId, String checkin, String checkout, int adultCount) {
+        log.info("singleHotelPreview start hotelId={} checkin={} checkout={} adultCount={}",
+                hotelId, checkin, checkout, adultCount);
         try {
             PreviewResult preview = previewToolClient.preview(new BookingParams(hotelId, checkin, checkout, adultCount));
             PricingComputationService.PricingBreakdown breakdown = pricingComputationService.apply(preview.price(), checkin);
@@ -91,18 +99,23 @@ public class ProductToolService {
             result.put("finalPrice", pricingComputationService.format(breakdown.currency(), breakdown.adjustedAmount()));
             result.put("cancellationPolicy", preview.cancellationPolicy());
             result.put("priceBreakdown", breakdown.items());
+            log.info("singleHotelPreview done providerPrice={} finalPrice={}", result.get("providerPrice"), result.get("finalPrice"));
             return toJson(result);
         } catch (PreviewToolException ex) {
+            log.warn("singleHotelPreview previewException code={} message={}", ex.getCode(), ex.getMessage());
             return toJson(Map.of(
                     "error", mapPreviewErrorCode(ex.getCode()),
                     "message", ex.getMessage()
             ));
         } catch (RuntimeException ex) {
+            log.error("singleHotelPreview runtimeException message={}", ex.getMessage(), ex);
             return toJson(Map.of("error", "preview_failed", "message", ex.getMessage()));
         }
     }
 
     public String priceComparison(String hotelIdsCsv, String checkin, String checkout, int adultCount) {
+        log.info("priceComparison start hotelIdsCsv={} checkin={} checkout={} adultCount={}",
+                hotelIdsCsv, checkin, checkout, adultCount);
         String[] ids = hotelIdsCsv.split(",");
         List<Map<String, Object>> comparisons = new ArrayList<>();
         for (String raw : ids) {
@@ -134,10 +147,12 @@ public class ProductToolService {
         }
 
         comparisons.sort(Comparator.comparingDouble(v -> ((Number) v.getOrDefault("priceNumeric", Double.MAX_VALUE)).doubleValue()));
+        log.info("priceComparison done comparisons={}", comparisons.size());
         return toJson(Map.of("comparisons", comparisons));
     }
 
     public String hotelDetails(String hotelId) {
+        log.info("hotelDetails start hotelId={}", hotelId);
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("hotelId", hotelId);
         details.put("name", "Hotel " + hotelId);
@@ -146,10 +161,13 @@ public class ProductToolService {
         details.put("address", "Details from provider directory");
         details.put("policyNote", "Cancellation and payment depend on selected rate.");
         details.put("source", "product-tool");
+        log.info("hotelDetails done hotelId={}", hotelId);
         return toJson(details);
     }
 
     public String recommendations(String city, String checkin, String checkout, int adultCount, double maxBudget) {
+        log.info("recommendations start city={} checkin={} checkout={} adultCount={} maxBudget={}",
+                city, checkin, checkout, adultCount, maxBudget);
         List<HotelSearchSuggestion> suggestions = searchToolClient.searchByCity(city, 10);
         List<Map<String, Object>> ranked = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -208,12 +226,16 @@ public class ProductToolService {
         payload.put("city", city);
         payload.put("recommendations", ranked);
         payload.put("suggestedBudget", lowestOverBudget == Double.MAX_VALUE ? 0.0 : round2(lowestOverBudget));
+        log.info("recommendations done city={} suggestionsInput={} recommendationsOut={} suggestedBudget={}",
+                city, suggestions.size(), ranked.size(), payload.get("suggestedBudget"));
         return toJson(payload);
     }
 
     public String currencyConvert(double amount, String fromCurrency, String toCurrency) {
+        log.info("currencyConvert start amount={} from={} to={}", amount, fromCurrency, toCurrency);
         double usd = amount / rate(fromCurrency);
         double converted = usd * rate(toCurrency);
+        log.info("currencyConvert done converted={}", converted);
         return toJson(Map.of(
                 "fromCurrency", fromCurrency.toUpperCase(Locale.ROOT),
                 "toCurrency", toCurrency.toUpperCase(Locale.ROOT),
@@ -232,6 +254,8 @@ public class ProductToolService {
             String paymentMethod,
             String paymentTiming
     ) {
+        log.info("bookingCreateHandoff start hotelId={} checkin={} checkout={} adultCount={} paymentMethod={} paymentTiming={}",
+                hotelId, checkin, checkout, adultCount, paymentMethod, paymentTiming);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", "READY_FOR_CREATE");
         payload.put("hotelId", hotelId);
@@ -248,10 +272,13 @@ public class ProductToolService {
                 "timing", paymentTiming,
                 "details", "REQUIRED_BY_METHOD"
         ));
+        log.info("bookingCreateHandoff done");
         return toJson(payload);
     }
 
     public String cancellationEstimator(String priceText, String cancellationPolicyText, int daysBeforeCheckin) {
+        log.info("cancellationEstimator start priceText={} policyText={} daysBeforeCheckin={}",
+                priceText, cancellationPolicyText, daysBeforeCheckin);
         double amount = parsePrice(priceText);
         double fee;
         String policy = cancellationPolicyText == null ? "" : cancellationPolicyText.toLowerCase(Locale.ROOT);
@@ -262,6 +289,7 @@ public class ProductToolService {
         } else {
             fee = amount * 0.5;
         }
+        log.info("cancellationEstimator done estimatedFee={}", fee);
         return toJson(Map.of(
                 "estimatedFee", round2(fee),
                 "currencyPriceText", priceText,
@@ -271,30 +299,37 @@ public class ProductToolService {
     }
 
     public String saveUserProfile(String userId, String key, String value) {
+        log.info("saveUserProfile start userId={} key={} valuePresent={}", userId, key, value != null && !value.isBlank());
         String redisKey = "profile:user:" + userId;
         redisTemplate.opsForHash().put(redisKey, key, value);
+        log.info("saveUserProfile done redisKey={}", redisKey);
         return toJson(Map.of("userId", userId, "saved", true, "key", key, "value", value));
     }
 
     public String getUserProfile(String userId) {
+        log.info("getUserProfile start userId={}", userId);
         String redisKey = "profile:user:" + userId;
         Map<Object, Object> raw = redisTemplate.opsForHash().entries(redisKey);
         Map<String, String> profile = new HashMap<>();
         for (Map.Entry<Object, Object> e : raw.entrySet()) {
             profile.put(String.valueOf(e.getKey()), String.valueOf(e.getValue()));
         }
+        log.info("getUserProfile done userId={} fields={}", userId, profile.size());
         return toJson(Map.of("userId", userId, "profile", profile));
     }
 
     private String toJson(Object payload) {
+        log.info("toJson start payloadType={}", payload == null ? "null" : payload.getClass().getSimpleName());
         try {
             return objectMapper.writeValueAsString(payload);
         } catch (JsonProcessingException ex) {
+            log.error("toJson serializationFailed message={}", ex.getMessage(), ex);
             return "{\"error\":\"serialization_failed\"}";
         }
     }
 
     private double parsePrice(String priceText) {
+        log.info("parsePrice start priceText={}", priceText);
         if (priceText == null || priceText.isBlank()) {
             return Double.MAX_VALUE;
         }
@@ -305,17 +340,21 @@ public class ProductToolService {
         try {
             return Double.parseDouble(normalized);
         } catch (RuntimeException ex) {
+            log.warn("parsePrice failed normalized={}", normalized);
             return Double.MAX_VALUE;
         }
     }
 
     private double round2(double value) {
-        return Math.round(value * 100.0) / 100.0;
+        double rounded = Math.round(value * 100.0) / 100.0;
+        log.info("round2 value={} rounded={}", value, rounded);
+        return rounded;
     }
 
     private double rate(String currency) {
+        log.info("rate start currency={}", currency);
         String c = currency == null ? "" : currency.toUpperCase(Locale.ROOT);
-        return switch (c) {
+        double rate = switch (c) {
             case "USD" -> 1.00;
             case "EUR" -> 0.92;
             case "GBP" -> 0.79;
@@ -323,14 +362,18 @@ public class ProductToolService {
             case "AED" -> 3.67;
             default -> 1.00;
         };
+        log.info("rate done currency={} rate={}", c, rate);
+        return rate;
     }
 
     private String mapPreviewErrorCode(PreviewToolException.Code code) {
-        return switch (code) {
+        String mapped = switch (code) {
             case TIMEOUT -> "provider_timeout";
             case SOLD_OUT -> "no_availability";
             case VALIDATION_ERROR -> "invalid_input";
             case UNAVAILABLE -> "provider_unavailable";
         };
+        log.info("mapPreviewErrorCode code={} mapped={}", code, mapped);
+        return mapped;
     }
 }

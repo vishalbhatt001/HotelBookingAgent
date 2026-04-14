@@ -3,6 +3,7 @@ package com.enterprise.booking.tool;
 import com.enterprise.booking.config.RapidApiProperties;
 import com.enterprise.booking.model.BookingParams;
 import com.enterprise.booking.model.PreviewResult;
+import com.enterprise.booking.observability.MethodLog;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatusCode;
@@ -34,6 +35,15 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
 
     @Override
     public PreviewResult preview(BookingParams params) {
+        MethodLog.Scope scope = MethodLog.start(
+                log,
+                "RapidApiHotelPreviewClient.preview",
+                "Call RapidAPI hotel search endpoint and map first preview result",
+                "hotelId", params.hotelId(),
+                "checkin", params.checkin(),
+                "checkout", params.checkout(),
+                "adultCount", params.adultCount()
+        );
         try {
             JsonNode response = restClient.get()
                     .uri(uriBuilder -> uriBuilder
@@ -61,21 +71,37 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
             String currency = readCurrency(hotelNode);
             BigDecimal total = readTotalPrice(hotelNode, params);
             String cancellation = readCancellationPolicy(hotelNode);
-            return new PreviewResult(formatPrice(currency, total), cancellation);
+            log.info("preview done currency={} total={} cancellation={}", currency, total, cancellation);
+            PreviewResult result = new PreviewResult(formatPrice(currency, total), cancellation);
+            scope.success(result);
+            return result;
         } catch (PreviewToolException ex) {
+            log.warn("preview toolException code={} message={}", ex.getCode(), ex.getMessage());
+            scope.failure(ex);
             throw ex;
         } catch (ResourceAccessException ex) {
-            throw new PreviewToolException(PreviewToolException.Code.TIMEOUT, "RapidAPI timeout", ex);
+            log.error("preview timeout message={}", ex.getMessage(), ex);
+            PreviewToolException wrapped = new PreviewToolException(PreviewToolException.Code.TIMEOUT, "RapidAPI timeout", ex);
+            scope.failure(wrapped);
+            throw wrapped;
         } catch (RestClientResponseException ex) {
-            throw mapHttpException(ex);
+            log.error("preview httpException status={}", ex.getStatusCode().value());
+            PreviewToolException mapped = mapHttpException(ex);
+            scope.failure(mapped);
+            throw mapped;
         } catch (RuntimeException ex) {
-            throw new PreviewToolException(PreviewToolException.Code.UNAVAILABLE, "RapidAPI preview failed", ex);
+            log.error("preview runtimeException message={}", ex.getMessage(), ex);
+            PreviewToolException wrapped = new PreviewToolException(PreviewToolException.Code.UNAVAILABLE, "RapidAPI preview failed", ex);
+            scope.failure(wrapped);
+            throw wrapped;
         }
     }
 
     private JsonNode firstHotelNode(JsonNode response, String requestedHotelId) {
+        log.info("firstHotelNode start requestedHotelId={}", requestedHotelId);
         JsonNode result = response.path("result");
         if (!result.isArray() || result.isEmpty()) {
+            log.warn("firstHotelNode result empty");
             return null;
         }
 
@@ -84,10 +110,12 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
                 return row;
             }
         }
+        log.info("firstHotelNode fallback to first result");
         return result.get(0);
     }
 
     private String readCurrency(JsonNode hotelNode) {
+        log.info("readCurrency start");
         String fromRow = hotelNode.path("currencycode").asText("");
         if (!fromRow.isBlank()) {
             return fromRow.toUpperCase(Locale.ROOT);
@@ -96,8 +124,10 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
     }
 
     private BigDecimal readTotalPrice(JsonNode hotelNode, BookingParams params) {
+        log.info("readTotalPrice start");
         JsonNode minTotal = hotelNode.path("min_total_price");
         if (minTotal.isNumber()) {
+            log.info("readTotalPrice using min_total_price");
             return minTotal.decimalValue();
         }
 
@@ -106,6 +136,7 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
                 .path("value");
         if (nightly.isNumber()) {
             long nights = Math.max(1, ChronoUnit.DAYS.between(LocalDate.parse(params.checkin()), LocalDate.parse(params.checkout())));
+            log.info("readTotalPrice using nightly n={} nightly={}", nights, nightly.decimalValue());
             return nightly.decimalValue().multiply(BigDecimal.valueOf(nights));
         }
 
@@ -116,6 +147,7 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
     }
 
     private String readCancellationPolicy(JsonNode hotelNode) {
+        log.info("readCancellationPolicy start");
         JsonNode freeCancellable = hotelNode.path("is_free_cancellable");
         if (freeCancellable.isBoolean()) {
             return freeCancellable.asBoolean()
@@ -126,10 +158,12 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
     }
 
     private String formatPrice(String currency, BigDecimal amount) {
+        log.info("formatPrice currency={} amount={}", currency, amount);
         return currency + " " + amount.setScale(2, RoundingMode.HALF_UP);
     }
 
     private PreviewToolException mapHttpException(RestClientResponseException ex) {
+        log.info("mapHttpException start status={}", ex.getStatusCode().value());
         HttpStatusCode status = ex.getStatusCode();
         String errorDetails = extractErrorDetails(ex);
         log.warn("RapidAPI hotel preview failed. status={} details={}", status.value(), errorDetails);
@@ -168,6 +202,7 @@ public class RapidApiHotelPreviewClient implements HotelPreviewToolClient {
     }
 
     private String extractErrorDetails(RestClientResponseException ex) {
+        log.info("extractErrorDetails start");
         String body = ex.getResponseBodyAsString();
         if (body == null || body.isBlank()) {
             return "empty response body";

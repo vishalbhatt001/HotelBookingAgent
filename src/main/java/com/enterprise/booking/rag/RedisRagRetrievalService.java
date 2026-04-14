@@ -2,6 +2,8 @@ package com.enterprise.booking.rag;
 
 import com.enterprise.booking.config.AgentProperties;
 import dev.langchain4j.model.embedding.EmbeddingModel;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +17,7 @@ import java.util.Set;
 @Service
 public class RedisRagRetrievalService implements RagRetrievalService {
 
+    private static final Logger log = LoggerFactory.getLogger(RedisRagRetrievalService.class);
     private static final String RAG_INDEX_KEY = "rag:doc:index";
     private static final String RAG_DOC_PREFIX = "rag:doc:";
 
@@ -34,8 +37,10 @@ public class RedisRagRetrievalService implements RagRetrievalService {
 
     @Override
     public List<String> retrieveFacts(String sessionId, String userMessage) {
+        log.info("retrieveFacts start sessionId={} userMessage={}", sessionId, userMessage);
         Set<String> ids = redisTemplate.opsForSet().members(RAG_INDEX_KEY);
         if (ids == null || ids.isEmpty()) {
+            log.info("retrieveFacts noDocsIndexed");
             return List.of();
         }
 
@@ -62,14 +67,17 @@ public class RedisRagRetrievalService implements RagRetrievalService {
             }
         }
 
-        return scored.stream()
+        List<String> facts = scored.stream()
                 .sorted(Comparator.comparingDouble(ScoredFact::score).reversed())
                 .limit(agentProperties.getRag().getTopK())
                 .map(ScoredFact::text)
                 .toList();
+        log.info("retrieveFacts done sessionId={} factsReturned={}", sessionId, facts.size());
+        return facts;
     }
 
     public void upsertDocuments(List<RagDocument> documents) {
+        log.info("upsertDocuments start count={}", documents.size());
         for (RagDocument doc : documents) {
             float[] vector = embeddingModel.embed(doc.text()).content().vector();
             String key = RAG_DOC_PREFIX + doc.id();
@@ -80,9 +88,11 @@ public class RedisRagRetrievalService implements RagRetrievalService {
             redisTemplate.opsForHash().putAll(key, map);
             redisTemplate.opsForSet().add(RAG_INDEX_KEY, doc.id());
         }
+        log.info("upsertDocuments done count={}", documents.size());
     }
 
     private String serializeVector(float[] vector) {
+        log.info("serializeVector start dimension={}", vector.length);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < vector.length; i++) {
             if (i > 0) {
@@ -94,6 +104,7 @@ public class RedisRagRetrievalService implements RagRetrievalService {
     }
 
     private float[] parseVector(String raw) {
+        log.info("parseVector start");
         String[] parts = raw.split(",");
         float[] values = new float[parts.length];
         for (int i = 0; i < parts.length; i++) {
@@ -103,6 +114,7 @@ public class RedisRagRetrievalService implements RagRetrievalService {
     }
 
     private double cosine(float[] left, float[] right) {
+        log.info("cosine start leftDim={} rightDim={}", left.length, right.length);
         int dim = Math.min(left.length, right.length);
         if (dim == 0) {
             return 0;
@@ -118,7 +130,9 @@ public class RedisRagRetrievalService implements RagRetrievalService {
         if (normLeft == 0 || normRight == 0) {
             return 0;
         }
-        return dot / (Math.sqrt(normLeft) * Math.sqrt(normRight));
+        double score = dot / (Math.sqrt(normLeft) * Math.sqrt(normRight));
+        log.info("cosine done score={}", score);
+        return score;
     }
 
     private record ScoredFact(String text, double score) {

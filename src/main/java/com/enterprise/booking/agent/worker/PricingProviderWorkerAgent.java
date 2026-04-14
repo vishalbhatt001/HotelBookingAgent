@@ -10,11 +10,14 @@ import com.enterprise.booking.model.BookingState;
 import com.enterprise.booking.service.AiToolExecutionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class PricingProviderWorkerAgent implements WorkerAgent {
 
+    private static final Logger log = LoggerFactory.getLogger(PricingProviderWorkerAgent.class);
     private final AiToolExecutionService aiToolExecutionService;
     private final ObjectMapper objectMapper;
 
@@ -28,12 +31,15 @@ public class PricingProviderWorkerAgent implements WorkerAgent {
 
     @Override
     public AgentType type() {
+        log.info("type called");
         return AgentType.PRICING_PROVIDER;
     }
 
     @Override
     public AgentResult execute(AgentTask task) {
         BookingSession session = task.context().getBookingSession();
+        log.info("execute start hotelId={} checkin={} checkout={} adultCount={}",
+                session.getHotelId(), session.getCheckin(), session.getCheckout(), session.getAdultCount());
         String aiOutput = aiToolExecutionService.runPricing(
                 "booking_preview",
                 session.getHotelId(),
@@ -41,6 +47,7 @@ public class PricingProviderWorkerAgent implements WorkerAgent {
                 session.getCheckout(),
                 String.valueOf(session.getAdultCount())
         );
+        log.info("execute pricingAiOutputLength={}", aiOutput.length());
 
         try {
             JsonNode json = objectMapper.readTree(aiOutput);
@@ -53,7 +60,9 @@ public class PricingProviderWorkerAgent implements WorkerAgent {
                     case "provider_timeout" -> "The pricing provider timed out.";
                     default -> "The pricing service is temporarily unavailable.";
                 };
-                return AgentResult.failure(type(), reason + (detail.isBlank() ? "" : (" Details: " + detail)));
+                String message = reason + (detail.isBlank() ? "" : (" Details: " + detail));
+                log.warn("execute providerError errorCode={} message={}", error, message);
+                return AgentResult.failure(type(), message);
             }
 
             String providerPrice = json.path("providerPrice").asText("");
@@ -61,6 +70,7 @@ public class PricingProviderWorkerAgent implements WorkerAgent {
             String cancellationPolicy = json.path("cancellationPolicy").asText("Cancellation policy is provided during final booking step.");
             String question = json.path("confirmationQuestion").asText("");
             if (finalPrice.isBlank()) {
+                log.warn("execute missing final price");
                 return AgentResult.failure(type(), "The pricing service did not return a final price.");
             }
 
@@ -70,10 +80,13 @@ public class PricingProviderWorkerAgent implements WorkerAgent {
                     "Cancellation policy: " + cancellationPolicy + ". " +
                     (question.isBlank() ? ("Do you confirm this booking at " + finalPrice + "?") : question);
 
-            return AgentResult.success(type(), msg)
+            AgentResult result = AgentResult.success(type(), msg)
                     .withPayload("providerPrice", providerPrice)
                     .withPayload("adjustedPrice", finalPrice);
+            log.info("execute done success providerPrice={} finalPrice={}", providerPrice, finalPrice);
+            return result;
         } catch (Exception ex) {
+            log.error("execute invalid pricing response message={}", ex.getMessage(), ex);
             return AgentResult.failure(type(), "The pricing service returned an invalid response. Details: " + ex.getMessage());
         }
     }

@@ -7,6 +7,8 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Booking Health", description = "Dependency health checks for agent runtime")
 public class AgentHealthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AgentHealthController.class);
     private final AgentDependencyHealthService healthService;
 
     public AgentHealthController(AgentDependencyHealthService healthService) {
@@ -73,6 +76,9 @@ public class AgentHealthController {
     public AgentDependencyHealthService.AgentHealthResponse checkAgents(
             @RequestParam(name = "deep", defaultValue = "false") boolean deep
     ) {
-        return healthService.check(deep);
+        log.info("checkAgents api start deep={}", deep);
+        AgentDependencyHealthService.AgentHealthResponse response = healthService.check(deep);
+        log.info("checkAgents api done status={} deep={}", response.status(), response.deepCheck());
+        return response;
     }
 }
