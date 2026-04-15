@@ -104,3 +104,4 @@ For RapidAPI, request headers are:
 Docs:
 - [RapidAPI Hub](https://rapidapi.com)
 - Full project guide: `docs/COMPLETE_SYSTEM_GUIDE.md`
+- New joiner onboarding guide: `docs/NEW_JOINER_ONBOARDING_GUIDE.md`

@@ -54,5 +54,7 @@ springdoc:
     tagsSorter: alpha
 
 logging:
+  pattern:
+    level: "%5p [callId:%X{callId}]"
   level:
     com.enterprise.booking: INFO

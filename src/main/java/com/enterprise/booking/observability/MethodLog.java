@@ -1,6 +1,7 @@
 package com.enterprise.booking.observability;
 
 import org.slf4j.Logger;
+import org.slf4j.MDC;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -16,7 +17,14 @@ public final class MethodLog {
     }
 
     public static Scope start(Logger log, String methodName, String purpose, Object... keyValues) {
-        String callId = UUID.randomUUID().toString();
+        String existingCallId = MDC.get("callId");
+        boolean createdHere = false;
+        String callId = existingCallId;
+        if (callId == null || callId.isBlank()) {
+            callId = UUID.randomUUID().toString();
+            MDC.put("callId", callId);
+            createdHere = true;
+        }
         Instant startedAt = Instant.now();
         Map<String, Object> args = kv(keyValues);
         log.info(
@@ -26,7 +34,7 @@ public final class MethodLog {
                 purpose,
                 summarize(args)
         );
-        return new Scope(log, callId, methodName, purpose, startedAt, args);
+        return new Scope(log, callId, methodName, purpose, startedAt, args, createdHere);
     }
 
     public static final class Scope {
@@ -36,14 +44,16 @@ public final class MethodLog {
         private final String purpose;
         private final Instant startedAt;
         private final Map<String, Object> args;
+        private final boolean createdHere;
 
-        private Scope(Logger log, String callId, String methodName, String purpose, Instant startedAt, Map<String, Object> args) {
+        private Scope(Logger log, String callId, String methodName, String purpose, Instant startedAt, Map<String, Object> args, boolean createdHere) {
             this.log = log;
             this.callId = callId;
             this.methodName = methodName;
             this.purpose = purpose;
             this.startedAt = startedAt;
             this.args = args;
+            this.createdHere = createdHere;
         }
 
         public void success(Object response) {
@@ -57,6 +67,7 @@ public final class MethodLog {
                     summarize(args),
                     summarize(response)
             );
+            cleanupIfNeeded();
         }
 
         public void failure(Throwable ex) {
@@ -71,6 +82,13 @@ public final class MethodLog {
                     ex.getMessage(),
                     ex
             );
+            cleanupIfNeeded();
+        }
+
+        private void cleanupIfNeeded() {
+            if (createdHere) {
+                MDC.remove("callId");
+            }
         }
     }
 
